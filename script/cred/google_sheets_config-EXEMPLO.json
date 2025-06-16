@@ -1,0 +1,32 @@
+{
+    "googlesheets_cred": {
+        "type": "service_account",
+        "project_id": "seu-projeto-id",
+        "private_key_id": "sua-private-key-id",
+        "private_key": "-----BEGIN PRIVATE KEY-----\\nSUA_CHAVE_AQUI\\n-----END PRIVATE KEY-----\\n",
+        "client_email": "seu-email@seuprojeto.iam.gserviceaccount.com",
+        "client_id": "1234567890",
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/seu-email%40seuprojeto.iam.gserviceaccount.com",
+        "universe_domain": "googleapis.com"
+    },
+    "googlesheets": {
+        "from_spreadsheet_id": "1aBcD2eFgHiJkLmNoPqRstUvWxYz1234567890",
+        "to_spreadsheet_id": "1aBcD2eFgHiJkLmNoPqRstUvWxYz1234567890",
+        "range": "Página1!A1:E10"
+    },
+    "db": {
+        "ip": "localhost",
+        "port": 5432,
+        "user": "postgres_user",
+        "password": "senha@exemplo$123",
+        "database": "nome_do_banco",
+        "table": "table_exemplo",
+        "id_row": "1"
+    },
+    "tokens": {
+        "access_token_ml": ""
+    }
+}
