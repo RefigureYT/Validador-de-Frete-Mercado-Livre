@@ -12,3 +12,5 @@
 }
 
 // 🔒 Obs.: use \\n para escapar corretamente a private_key no JSON
+// Ou rode esse comando no terminal dentro de /script:
+// node -e "const fs = require('fs'); let j = fs.readFileSync('cred/google_sheets_config.json', 'utf8'); j = JSON.parse(j); j.private_key = j.private_key.replace(/\n/g, '\\n'); fs.writeFileSync('cred/google_sheets_config.json', JSON.stringify(j, null, 2));"
