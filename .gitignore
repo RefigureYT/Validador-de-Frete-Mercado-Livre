@@ -1,4 +1,5 @@
 script/cred/google_sheets_config.json
+script/cred/*-google_sheets_config.json
 script/node_modules/
 tutorial.md
 script/venv

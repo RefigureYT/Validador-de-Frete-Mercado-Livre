@@ -12,7 +12,7 @@ const iniciarScraperFrete = async () => {
     const cookiesPath = path.join(__dirname, 'cookies', 'state_mercadolivre.json');
 
     browser = await puppeteer.launch({
-        headless: false,
+        headless: true,
         defaultViewport: null,
         args: ['--start-maximized']
     });
@@ -73,7 +73,7 @@ const capturarFreteViaPuppeteer = async (mlb) => {
             if (textoCompleto.toLowerCase().includes("envioporcontadocomprador")) {
                 console.log("🚚 Valor de frete extraído: Envio por conta do comprador");
                 return "Envio por conta do comprador";
-            }            
+            }
 
             const match = textoCompleto.match(/(\d+,\d{2})/);
             const valor = match ? match[1] : null;
@@ -319,7 +319,8 @@ async function addSheetsSemFrete(valores) {
             }
         }
 
-        const destino = `Página1!A${linhaAlvo + 1}:C${linhaAlvo + 1}`;
+        const abaDestino = config.googlesheets.to_range.split('!')[0];
+        const destino = `${abaDestino}!A${linhaAlvo + 1}:C${linhaAlvo + 1}`;
 
         await sheets.spreadsheets.values.update({
             spreadsheetId: sheetId,
@@ -371,6 +372,7 @@ function formatarDimensoes(attributes) {
     // Exemplo de uso
     const mlbIDs = chamarPython();
 
+    console.log(`📰 Total de anúncios: ${mlbIDs.length}`);
     for (const anuncio of mlbIDs) {
         console.log('⏳ Verificando: ', anuncio);
 
