@@ -4,49 +4,124 @@ const { Client } = require('pg');
 const { spawnSync } = require('child_process');
 const { google } = require('googleapis');
 const puppeteer = require('puppeteer');
+const { Console } = require('console');
 
 let browser, page;
 
 const iniciarScraperFrete = async () => {
-    const cookiesPath = path.join(__dirname, 'cookies', 'cookies_mercadolivre.json');
+    const cookiesPath = path.join(__dirname, 'cookies', 'state_mercadolivre.json');
 
     browser = await puppeteer.launch({
-        headless: false, // Mostra o navegador
-        defaultViewport: null, // Usa o tamanho da janela padrão do sistema
-        args: ['--start-maximized'] // Abre maximizado (opcional)
+        headless: false,
+        defaultViewport: null,
+        args: ['--start-maximized']
     });
 
     page = await browser.newPage();
 
-    // Define cookies para autenticação
-    const cookies = JSON.parse(fs.readFileSync(cookiesPath));
-    await page.goto('https://www.mercadolivre.com.br', { waitUntil: 'domcontentloaded' });
-    await page.setCookie(...cookies);
+    // Restaura sessão
+    await restaurarSessao(page, cookiesPath);
+};
 
-    console.log("🟢 Puppeteer inicializado e cookies carregados");
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+const restaurarSessao = async (page, caminhoJson) => {
+    const session = JSON.parse(fs.readFileSync(caminhoJson, 'utf-8'));
+
+    await page.setCookie(...session.cookies);
+
+    await page.goto('https://www.mercadolivre.com.br', { waitUntil: 'domcontentloaded' });
+
+    await page.evaluate((local, session) => {
+        for (const key in local) {
+            localStorage.setItem(key, local[key]);
+        }
+        for (const key in session) {
+            sessionStorage.setItem(key, session[key]);
+        }
+    }, session.localStorage, session.sessionStorage);
+
+    console.log("🔄 Sessão restaurada com sucesso!");
 };
 
 const capturarFreteViaPuppeteer = async (mlb) => {
     try {
         const url = `https://www.mercadolivre.com.br/anuncios/lista?search=${mlb}`;
         const seletorBase = `#shipping-${mlb}`;
+        const seletor404 = "#app-root-wrapper > div.listing-page > div.sc-listing-page > div.sc-list-main-view > div.sc-empty-view > div > h2";
 
         await page.goto(url, { waitUntil: 'domcontentloaded' });
-        await page.waitForSelector(seletorBase, { timeout: 7000 });
+        await delay(1000);
 
-        const texto = await page.$eval(seletorBase, el => el.innerText.trim());
-        return texto;
+        // Verifica se o shipping existe
+        const shippingExiste = await page.$(seletorBase);
+
+        if (shippingExiste) {
+            await page.waitForFunction(
+                (sel) => {
+                    const el = document.querySelector(sel);
+                    return el && el.innerText && el.innerText.trim().length > 0;
+                },
+                { timeout: 5000 },
+                seletorBase
+            );
+
+            const textoCompleto = await page.$eval(seletorBase, el => el.textContent.replace(/\s+/g, ''));
+
+            console.log(`📦 Texto bruto capturado: ${textoCompleto}`);
+
+            if (textoCompleto.toLowerCase().includes("envioporcontadocomprador")) {
+                console.log("🚚 Valor de frete extraído: Envio por conta do comprador");
+                return "Envio por conta do comprador";
+            }            
+
+            const match = textoCompleto.match(/(\d+,\d{2})/);
+            const valor = match ? match[1] : null;
+
+            console.log(`🚚 Valor de frete extraído: ${valor}`);
+
+            // Salvar cookies atualizados
+            const cookiesAtualizados = await page.cookies();
+            const cookiesPath = path.join(__dirname, 'cookies', 'cookies_mercadolivre.json');
+            fs.writeFileSync(cookiesPath, JSON.stringify(cookiesAtualizados, null, 2));
+            console.log(`💾 Cookies atualizados salvos após acessar ${mlb}`);
+
+            // Salvar localStorage e sessionStorage atualizados
+            const estadoAtual = await page.evaluate(() => ({
+                localStorage: Object.fromEntries(Object.entries(localStorage)),
+                sessionStorage: Object.fromEntries(Object.entries(sessionStorage))
+            }));
+            const fullStatePath = path.join(__dirname, 'cookies', 'state_mercadolivre.json');
+            fs.writeFileSync(fullStatePath, JSON.stringify({
+                cookies: cookiesAtualizados,
+                localStorage: estadoAtual.localStorage,
+                sessionStorage: estadoAtual.sessionStorage
+            }, null, 2));
+            console.log(`💾 Sessão completa atualizada em: ${fullStatePath}`);
+
+            return valor;
+        } else {
+            const texto404 = await page.$eval(seletor404, el => el.innerText).catch(() => null);
+            if (texto404 && texto404.includes("Não há nada aqui")) {
+                return "ANÚNCIO NÃO ENCONTRADO";
+            } else {
+                throw new Error("Seletor de frete não encontrado e não é 404");
+            }
+        }
     } catch (err) {
         console.error(`❌ Erro ao capturar frete para ${mlb}:`, err.message);
         return null;
     }
 };
 
+
 const encerrarScraperFrete = async () => {
     if (browser) {
         await browser.close();
         console.log("🔴 Puppeteer encerrado.");
     }
+    console.log("FINALIZANDO SCRIPT 🔒");
+    process.exit(0); // Encerra o nodejs
 };
 
 // Função para capturar a chave do Mercado Livre no Postgres
@@ -199,7 +274,7 @@ async function addSheetsSemFrete(valores) {
 
     const credentials = config.googlesheets_cred;
     const sheetId = config.googlesheets.to_spreadsheet_id;
-    const rangeDestino = "Página1!A:C";
+    const rangeDestino = config.googlesheets.to_range;
 
     const auth = new google.auth.GoogleAuth({
         credentials: credentials,
@@ -287,6 +362,7 @@ function formatarDimensoes(attributes) {
 }
 
 (async () => {
+    const inicio = Date.now();
     await iniciarScraperFrete();
     await atualizarChaveToken();
     const dirJson = path.join(__dirname, 'cred/google_sheets_config.json');
@@ -304,24 +380,35 @@ function formatarDimensoes(attributes) {
             if (verificarDimensoes(response.attributes)) {
                 console.log("✅ Todas as dimensões estão presentes.");
                 const dimensoesFormatadas = formatarDimensoes(response.attributes);
+                let freteResponse;
                 console.log("📦 Dimensões e peso:", dimensoesFormatadas, "Preço: ", response.price);
 
-                const frete = await capturarFreteViaPuppeteer(anuncio);
-                console.log(`Frete capturado para ${anuncio}:`, frete);
+                // Captura o valor do frete diretamente da página
+                const valorFreteCapturado = await capturarFreteViaPuppeteer(anuncio);
+
+                if ((valorFreteCapturado || "").toLowerCase().includes("envio por conta do comprador")) {
+                    console.log(`Frete capturado para ${anuncio}: ${valorFreteCapturado}`);
+                    await addSheetsSemFrete([anuncio, "Envio por conta do comprador", "Envio por conta do comprador"]);
+                    continue;
+                }
 
 
                 try {
-                    const data = await calcularFrete(dimensoesFormatadas, response.price);
-
-                    if (!data || data.freteCalculado == null) {
+                    console.log("Dimensões: ", dimensoesFormatadas, "Preço: ", response.price);
+                    freteResponse = await calcularFrete(dimensoesFormatadas, response.price);
+                    if (!freteResponse || freteResponse.freteCalculado === undefined) {
                         throw new Error("Falha na requisição do frete");
                     }
 
+                    const data = freteResponse;
                     const freteCalculado = data.freteCalculado;
-                    // console.log("✅ Resposta da API:", data);
 
-                    await addSheetsSemFrete([anuncio, dimensoesFormatadas, freteCalculado]);
+                    console.log(`Frete capturado para ${anuncio}: ${valorFreteCapturado}`);
+                    console.log("✅ Resposta da API:", data);
+
+                    await addSheetsSemFrete([anuncio, valorFreteCapturado, freteCalculado]);
                 } catch (err) {
+                    console.log("Resposta da requisição: ", freteResponse);
                     console.error("❌ Erro ao calcular o frete:", err.message);
                     await addSheetsSemFrete([anuncio, dimensoesFormatadas, "❌ Erro ao calcular o frete"]);
                 }
@@ -334,5 +421,8 @@ function formatarDimensoes(attributes) {
             console.error(`❌ Erro ao verificar o anúncio ${anuncio}:`, err.message);
         }
     }
-
+    const duracao = ((Date.now() - inicio) / 1000).toFixed(1);
+    console.log(`✅ Script finalizado em ${duracao} segundos.`);
+    console.log(`📰 Total de anúncios processados: ${mlbIDs.length}`);
+    await encerrarScraperFrete();
 })();

@@ -15,7 +15,8 @@
     "googlesheets": {
         "from_spreadsheet_id": "1aBcD2eFgHiJkLmNoPqRstUvWxYz1234567890",
         "to_spreadsheet_id": "1aBcD2eFgHiJkLmNoPqRstUvWxYz1234567890",
-        "range": "Página1!A1:E10"
+        "from_range": "Página1!A1:E10",
+        "to_range": "Página1!A1:E10"
     },
     "db": {
         "ip": "localhost",

@@ -23,7 +23,7 @@ sheet = service.spreadsheets()
 # Lê os dados da planilha
 result = sheet.values().get(
     spreadsheetId=sheet_data["from_spreadsheet_id"],
-    range=sheet_data["range"]
+    range=sheet_data["from_range"]
 ).execute()
 
 values = result.get('values', [])
